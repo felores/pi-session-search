@@ -31,18 +31,18 @@ historical evidence.
 ```mermaid
 flowchart TB
   subgraph MEMORY["Memory-first extension"]
-    direction LR
+    direction TB
     M1["Past conversations"] --> M2["Select and rewrite facts"]
     M2 --> M3[("Durable memory")]
-    M3 --> M4["Inject retained context into later prompts"]
+    M3 --> M4["Inject retained context<br/>into later prompts"]
   end
 
   subgraph SEARCH["Session Search"]
-    direction LR
+    direction TB
     S1["Read-only Pi transcripts"] --> S2[("Private FTS5 index")]
-    S3["Current question"] --> S4["session_search on demand"]
+    S3["Current question"] --> S4["session_search<br/>on demand"]
     S2 --> S4
-    S4 --> S5["Bounded, untrusted excerpts"]
+    S4 --> S5["Bounded, untrusted<br/>excerpts"]
   end
 ```
 
@@ -66,11 +66,11 @@ conversation into standing context for the next one.
 ### From transcript to bounded evidence
 
 ```mermaid
-flowchart LR
+flowchart TB
   J["Pi JSONL transcripts"] --> P["Parse visible prose"]
-  P -. drops .-> X["Thinking, images, tool I/O, extension entries"]
+  P -. drops .-> X["Thinking, images,<br/>tool I/O, extension entries"]
   P --> D[("Private SQLite FTS5")]
-  Q["Question plus optional query variants"] --> R{"Search route"}
+  Q["Question plus optional<br/>query variants"] --> R{"Search route"}
   D --> R
   R -->|"Exact: newest first"| O["Dedupe, filter, and bound"]
   R -->|"Broad: BM25 relevance"| O
