@@ -1,0 +1,26 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.scratchpad/
+.env
+.env.*
+!.env.example
+
+# Local Session Search state
+.session-search/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Harness runtime
+.harness/progress.md
+.harness/patterns.md
+.harness/*.pid
+.harness/logs/
+.harness/runs.json
+.harness/lane-coordinator.lock/
+.harness/*.tmp-*
+.harness/run-logs/
+.harness/patches/
