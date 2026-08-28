@@ -26,6 +26,30 @@ An index is not context. Historical text reaches the model only when the agent
 calls `session_search`, and every result is bounded and labeled as untrusted
 historical evidence.
 
+### Two ways to reuse history
+
+```mermaid
+flowchart TB
+  subgraph MEMORY["Memory-first extension"]
+    direction LR
+    M1["Past conversations"] --> M2["Select and rewrite facts"]
+    M2 --> M3[("Durable memory")]
+    M3 --> M4["Inject retained context into later prompts"]
+  end
+
+  subgraph SEARCH["Session Search"]
+    direction LR
+    S1["Read-only Pi transcripts"] --> S2[("Private FTS5 index")]
+    S3["Current question"] --> S4["session_search on demand"]
+    S2 --> S4
+    S4 --> S5["Bounded, untrusted excerpts"]
+  end
+```
+
+Memory-first tools can make retained material part of future prompts before the
+current task proves it is relevant. Session Search keeps transcripts and the
+index outside the prompt until the agent asks for specific evidence.
+
 | | Memory-first extensions | Session Search |
 |---|---|---|
 | Main job | Carry selected knowledge into future work | Retrieve evidence from past conversations when requested |
@@ -38,6 +62,24 @@ historical evidence.
 This makes Session Search the better default for conversation recall. You get
 the useful part, finding what happened before, without turning every past
 conversation into standing context for the next one.
+
+### From transcript to bounded evidence
+
+```mermaid
+flowchart LR
+  J["Pi JSONL transcripts"] --> P["Parse visible prose"]
+  P -. drops .-> X["Thinking, images, tool I/O, extension entries"]
+  P --> D[("Private SQLite FTS5")]
+  Q["Question plus optional query variants"] --> R{"Search route"}
+  D --> R
+  R -->|"Exact: newest first"| O["Dedupe, filter, and bound"]
+  R -->|"Broad: BM25 relevance"| O
+  O --> U["Untrusted historical evidence"]
+```
+
+The extension writes only its rebuildable index. It does not rewrite source
+transcripts, create memories, call a translation service, or add search results
+to the prompt without a `session_search` call.
 
 The boundary is enforced in code. Thinking blocks, images, tool arguments, tool
 results, and extension entries stay out of the index. A call returns at most 20
