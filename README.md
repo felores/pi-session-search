@@ -1,3 +1,14 @@
+<div align="center">
+<pre>
+         █████████
+         ███   ███
+       ██████   ███
+       ███      ███
+
+S E S S I O N   S E A R C H
+</pre>
+</div>
+
 # Session Search
 
 **Why inject memory into every Pi session when you can search history on demand?**
