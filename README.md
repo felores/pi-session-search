@@ -1,13 +1,15 @@
 <div align="center">
 <pre>
-         █████████
-         ███   ███
-       ██████   ███
-       ███      ███
+      █████████
+      ███   ███
+      ██████   ███
+      ███      ███
 
-S E S S I O N   S E A R C H
+SESSION SEARCH
 </pre>
 </div>
+
+<p align="center">🇬🇧 <b>English</b> &nbsp;·&nbsp; 🇪🇸 <a href="README.es.md">Español</a></p>
 
 # Session Search
 
