@@ -2,13 +2,13 @@
 
 **Why inject memory into every Pi session when you can search history on demand?**
 
-Your agent should not carry unrelated history into every new task.
-
 Memory-first extensions solve a real but different problem. They preserve
 selected facts, preferences, summaries, or instructions for future work. That
 is useful when the retained material should influence every relevant session.
 It is a poor default when you only want to answer questions such as "What did
 we decide about the migration?" or "Where did we fix this before?"
+
+Your agent should not carry unrelated history into every new task.
 
 Persistent memory has to decide what deserves to survive, keep that material
 current, and decide when to place it back into the prompt. A bad decision at any
