@@ -1,13 +1,10 @@
-<div align="center">
-<pre>
-      █████████
-      ███   ███
-      ██████   ███
-      ███      ███
-
-SESSION SEARCH
-</pre>
-</div>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/session-search-title-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/session-search-title-light.svg">
+    <img alt="Session Search" src="docs/assets/session-search-title-light.svg" width="640">
+  </picture>
+</p>
 
 <p align="center">🇬🇧 <a href="README.md">English</a> &nbsp;·&nbsp; 🇪🇸 <b>Español</b></p>
 

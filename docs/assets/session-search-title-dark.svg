@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" role="img" aria-labelledby="title desc" preserveAspectRatio="xMidYMid meet">
+  <title id="title">Session Search</title>
+  <desc id="desc">The Pi pixel logo above the words Session Search.</desc>
+  <rect width="640" height="300" fill="#0d1117"/>
+
+  <g fill="#f0f6fc">
+    <rect x="206" y="32" width="171" height="42"/>
+    <rect x="206" y="74" width="57" height="42"/>
+    <rect x="320" y="74" width="57" height="42"/>
+    <rect x="206" y="116" width="114" height="42"/>
+    <rect x="377" y="116" width="57" height="42"/>
+    <rect x="206" y="158" width="57" height="42"/>
+    <rect x="377" y="158" width="57" height="42"/>
+  </g>
+
+  <text x="320" y="258" fill="#f0f6fc" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="30" font-weight="600" text-anchor="middle">SESSION SEARCH</text>
+</svg>
