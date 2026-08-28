@@ -2,13 +2,13 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/session-search-title-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="docs/assets/session-search-title-light.svg">
-    <img alt="Session Search" src="docs/assets/session-search-title-light.svg" width="640">
+    <img alt="Pi Session Search" src="docs/assets/session-search-title-light.svg" width="640">
   </picture>
 </p>
 
 <p align="center">🇬🇧 <b>English</b> &nbsp;·&nbsp; 🇪🇸 <a href="README.es.md">Español</a></p>
 
-# Session Search
+# Pi Session Search
 
 **Why inject memory into every Pi session when you can search history on demand?**
 
@@ -132,10 +132,10 @@ Excluded by default:
 
 ## Install
 
-Session Search currently installs from GitHub:
+Install Pi Session Search from npm:
 
 ```bash
-pi install git:github.com/felores/pi-session-search
+pi install npm:@felores/pi-session-search
 ```
 
 Restart Pi or run `/reload`, then build the initial index:
