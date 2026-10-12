@@ -106,10 +106,14 @@ known-item queries. Persistent-engine p95 latency was 1.16 ms. See
 
 ## Runtime contract
 
-- `session_search` searches bounded historical snippets.
+- `session_search` searches bounded historical snippets. An optional `sessionId`
+  restricts retrieval to an exact UUID or source-qualified ID such as `pi:<uuid>`.
+  Omit `query` with `sessionId` to read recent messages newest first; `offset`
+  pages through older messages. At least one of `query` or `sessionId` is required.
 - `queryVariants` accepts up to three agent-supplied source-language
   translations or keyword paraphrases. Variants are searched first and results
-  are interleaved and deduplicated by session.
+  are interleaved and deduplicated by session, or by message when `sessionId`
+  is supplied. Variants require a query.
 - `/session-index` reconciles and incrementally updates the local index.
 - Startup performs a bounded incremental backfill.
 - Live indexing follows finalized messages.
@@ -147,6 +151,37 @@ Restart Pi or run `/reload`, then build the initial index:
 Ask Pi about earlier conversations normally. The agent can call
 `session_search` with optional source-language `queryVariants` when the current
 question and the historical conversation may use different languages.
+
+### Continue from a named session
+
+Say "Search session 01a10267-2651-75bc-9953-c281a780d680 and let's continue."
+The agent can first retrieve recent context without guessing search terms:
+
+```json
+{"sessionId":"01a10267-2651-75bc-9953-c281a780d680","limit":10}
+```
+
+Results include project, cwd, date, role, and visible prose. The response reports
+the number of matching indexed messages and an `offset` for older context when
+available. Structured details include `totalMessages` and `nextOffset`, which
+is `null` at the end. Use the returned offset with the same session and filters.
+It accounts for messages omitted by the output cap, so those remain retrievable.
+Pagination reflects the index at each call; messages arriving between calls can
+shift offsets.
+
+To find earlier decisions or unfinished work within that session:
+
+```json
+{"sessionId":"01a10267-2651-75bc-9953-c281a780d680","query":"tasks OR decisions OR blockers","limit":10}
+```
+
+`offset` is only available without a query. Recent-context retrieval defaults
+to 4,000 characters per message, with the same 20-result and 50 KiB output caps.
+This is evidence retrieval, not a generated handoff or a switch to the old
+session. The agent must reconstruct goals, decisions, progress, and remaining
+work from the excerpts, then check current repository and task sources before
+continuing. Tool results and extension entries remain excluded; task state
+stored only there is not recovered. Missing sessions may need `/session-index`.
 
 The extension reads Pi JSONL transcripts without modifying them. Generated
 state stays in `~/.pi/agent/session-search/` with private filesystem modes.

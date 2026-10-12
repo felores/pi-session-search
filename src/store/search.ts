@@ -9,6 +9,7 @@ import {
 } from "./fts-query.js";
 
 export interface SessionSearchResult {
+  messageId: string;
   sessionId: string;
   source: string;
   project: string;
@@ -19,6 +20,7 @@ export interface SessionSearchResult {
 }
 
 export interface SearchOptions {
+  sessionId?: string;
   limit?: number;
   project?: string;
   role?: string;
@@ -27,6 +29,58 @@ export interface SearchOptions {
 }
 
 type Match = { type: "fts"; query: string; order: "recency" | "relevance" } | { type: "like"; terms: string[] };
+
+function filters(options: SearchOptions): { conditions: string[]; params: string[] } {
+  const conditions: string[] = [];
+  const params: string[] = [];
+  if (options.sessionId) {
+    conditions.push("(s.id = ? OR s.native_id = ?)");
+    params.push(options.sessionId, options.sessionId);
+  }
+  for (const [column, value] of [
+    ["s.project", options.project], ["m.role", options.role],
+    ["m.timestamp", options.since], ["s.source", options.source],
+  ]) {
+    if (!value) continue;
+    conditions.push(`${column} ${column === "m.timestamp" ? ">=" : "="} ?`);
+    params.push(value);
+  }
+  return { conditions, params };
+}
+
+function resultFromRow(row: unknown): SessionSearchResult {
+  const value = row as Record<string, string>;
+  return {
+    messageId: value.id,
+    sessionId: value.session_id,
+    source: value.source,
+    project: value.project,
+    cwd: value.cwd,
+    role: value.role,
+    content: value.content,
+    timestamp: value.timestamp,
+  };
+}
+
+/** Read indexed visible prose newest first, without requiring a lexical match. */
+export function readSessionMessages(
+  dbManager: DatabaseManager,
+  options: SearchOptions & { sessionId: string; offset?: number },
+): { results: SessionSearchResult[]; totalMessages: number } {
+  if (!options.sessionId.trim()) throw new Error("sessionId is required");
+  const db = dbManager.getDb();
+  const { conditions, params } = filters(options);
+  const from = `FROM messages m JOIN sessions s ON s.id = m.session_id WHERE ${conditions.join(" AND ")}`;
+  // Count and page share a snapshot even while another Pi process indexes messages.
+  return db.transaction(() => {
+    const totalMessages = (db.prepare(`SELECT COUNT(*) AS count ${from}`).get(...params) as { count: number }).count;
+    const results = db.prepare(`
+      SELECT m.id, m.session_id, s.source, s.project, s.cwd, m.role, m.content, m.timestamp
+      ${from} ORDER BY m.timestamp DESC, m.rowid DESC LIMIT ? OFFSET ?
+    `).all(...params, Math.min(Math.max(options.limit ?? 10, 1), 20), options.offset ?? 0).map(resultFromRow);
+    return { results, totalMessages };
+  })();
+}
 
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
@@ -56,22 +110,9 @@ export function searchSessions(
       params.push(...match.terms.map((term) => `%${escapeLike(term)}%`));
     }
 
-    if (options.project) {
-      conditions.push("s.project = ?");
-      params.push(options.project);
-    }
-    if (options.role) {
-      conditions.push("m.role = ?");
-      params.push(options.role);
-    }
-    if (options.since) {
-      conditions.push("m.timestamp >= ?");
-      params.push(options.since);
-    }
-    if (options.source) {
-      conditions.push("s.source = ?");
-      params.push(options.source);
-    }
+    const filtered = filters(options);
+    conditions.push(...filtered.conditions);
+    params.push(...filtered.params);
 
     try {
       const fromClause = match.type === "fts" && match.order === "relevance"
@@ -81,24 +122,13 @@ export function searchSessions(
         ? "ORDER BY bm25(message_fts) ASC, m.timestamp DESC"
         : "ORDER BY m.timestamp DESC";
       return db.prepare(`
-        SELECT m.session_id, s.source, s.project, s.cwd, m.role, m.content, m.timestamp
+        SELECT m.id, m.session_id, s.source, s.project, s.cwd, m.role, m.content, m.timestamp
         ${fromClause}
         JOIN sessions s ON s.id = m.session_id
         WHERE ${conditions.join(" AND ")}
         ${orderClause}
         LIMIT ?
-      `).all(...params, limit).map((row) => {
-        const value = row as Record<string, string>;
-        return {
-          sessionId: value.session_id,
-          source: value.source,
-          project: value.project,
-          cwd: value.cwd,
-          role: value.role,
-          content: value.content,
-          timestamp: value.timestamp,
-        };
-      });
+      `).all(...params, limit).map(resultFromRow);
     } catch (error) {
       if (match.type === "fts" && isFts5QueryError(error)) {
         ftsParseError = true;
@@ -146,7 +176,7 @@ const EXPANDED_CANDIDATE_LIMIT = 100;
 /**
  * Search an original query plus agent-supplied translations or paraphrases.
  * Source-language variants are interleaved before the original-language query,
- * then deduplicated by session. A single query delegates directly to
+ * then deduplicated by session, or by message when scoped to a session. A single query delegates directly to
  * searchSessions so the established lexical ordering is unchanged when
  * expansion is not requested.
  */
@@ -171,6 +201,7 @@ export function searchSessionsExpanded(
   if (queries.length <= 1) return searchSessions(dbManager, query, options);
 
   const requestedLimit = Math.min(Math.max(Math.floor(options.limit ?? 10), 1), 20);
+  const resultKey = (result: SessionSearchResult): string => options.sessionId ? result.messageId : result.sessionId;
   const rankedLists = queries.map((expandedQuery) => {
     const results = searchSessions(dbManager, expandedQuery, {
       ...options,
@@ -178,8 +209,8 @@ export function searchSessionsExpanded(
     });
     const seenSessions = new Set<string>();
     return results.filter((result) => {
-      if (seenSessions.has(result.sessionId)) return false;
-      seenSessions.add(result.sessionId);
+      if (seenSessions.has(resultKey(result))) return false;
+      seenSessions.add(resultKey(result));
       return true;
     });
   });
@@ -192,8 +223,8 @@ export function searchSessionsExpanded(
       const result = list[rank];
       if (!result) continue;
       foundAtRank = true;
-      if (emittedSessions.has(result.sessionId)) continue;
-      emittedSessions.add(result.sessionId);
+      if (emittedSessions.has(resultKey(result))) continue;
+      emittedSessions.add(resultKey(result));
       output.push(result);
       if (output.length >= requestedLimit) break;
     }

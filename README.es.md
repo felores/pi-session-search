@@ -114,10 +114,15 @@ ver la metodología y sus limitaciones.
 
 ## Contrato de ejecución
 
-- `session_search` busca fragmentos acotados en el historial.
+- `session_search` busca fragmentos acotados en el historial. `sessionId`
+  restringe la recuperación a un UUID exacto o un ID con fuente como `pi:<uuid>`.
+  Omite `query` con `sessionId` para leer los mensajes recientes, del más nuevo
+  al más antiguo; `offset` permite leer páginas anteriores. Se requiere al menos
+  uno de los parámetros `query` o `sessionId`.
 - `queryVariants` acepta hasta tres traducciones al idioma fuente o paráfrasis
   de palabras clave proporcionadas por el agente. Las variantes se buscan
-  primero, y los resultados se intercalan y deduplican por sesión.
+  primero, y los resultados se intercalan y deduplican por sesión, o por mensaje
+  cuando se proporciona `sessionId`. Las variantes requieren una consulta.
 - `/session-index` reconcilia y actualiza incrementalmente el índice local.
 - El inicio ejecuta un backfill incremental acotado.
 - La indexación en vivo sigue los mensajes finalizados.
@@ -158,6 +163,39 @@ Pregunta normalmente a Pi sobre conversaciones anteriores. El agente puede
 llamar `session_search` con `queryVariants` opcionales en el idioma fuente
 cuando la pregunta actual y la conversación histórica podrían usar idiomas
 distintos.
+
+### Continuar desde una sesión específica
+
+Di "Busca la sesión 01a10267-2651-75bc-9953-c281a780d680 y continuemos".
+El agente puede recuperar primero el contexto reciente sin adivinar palabras
+de búsqueda:
+
+```json
+{"sessionId":"01a10267-2651-75bc-9953-c281a780d680","limit":10}
+```
+
+Los resultados incluyen proyecto, directorio, fecha, rol y prosa visible.
+La respuesta indica cuántos mensajes indexados coinciden y un `offset` para
+leer contexto anterior cuando exista. Los detalles estructurados incluyen
+`totalMessages` y `nextOffset`, que es `null` al llegar al final. Usa el offset
+devuelto con la misma sesión y filtros. Tiene en cuenta los mensajes omitidos
+por el límite de salida para que sigan siendo recuperables. Cada llamada refleja
+el índice actual; nuevos mensajes entre llamadas pueden desplazar los offsets.
+
+Para buscar decisiones anteriores o trabajo pendiente dentro de esa sesión:
+
+```json
+{"sessionId":"01a10267-2651-75bc-9953-c281a780d680","query":"tareas OR decisiones OR bloqueos","limit":10}
+```
+
+`offset` solo está disponible sin consulta. La lectura de contexto reciente usa
+4.000 caracteres por mensaje de forma predeterminada, con los mismos límites de
+20 resultados y 50 KiB de salida. Recupera evidencia, no genera un resumen ni
+cambia a la sesión anterior. El agente debe reconstruir objetivos, decisiones,
+avances y pendientes a partir de los fragmentos y comprobar las fuentes actuales
+del repositorio y las tareas antes de continuar. Los resultados de herramientas
+y las entradas de extensiones siguen excluidos; no se recuperan tareas guardadas
+solo allí. Si falta una sesión, puede ser necesario ejecutar `/session-index`.
 
 La extensión lee las transcripciones JSONL de Pi sin modificarlas. El estado
 generado permanece en `~/.pi/agent/session-search/` con permisos privados del

@@ -329,6 +329,87 @@ describe("session-only database and search", () => {
 });
 
 describe("extension contract", () => {
+  it("reads exact session context and older pages without a query", async () => {
+    const root = temporaryDirectory("session-search-context");
+    const sessionsDir = path.join(root, "sessions");
+    const id = "01a10267-2651-75bc-9953-c281a780d680";
+    const transcript = writeSession(sessionsDir, { id });
+    writeSession(sessionsDir, { id: `${id}-other` });
+    const beforeDigest = fileDigest(transcript);
+    const manager = new DatabaseManager(path.join(root, "store"));
+    await indexChangedFiles(manager, new PiSource(sessionsDir), 100 * 1024);
+    let definition: any;
+    registerSessionSearchTool({ registerTool(value: unknown) { definition = value; } } as unknown as ExtensionAPI, manager);
+
+    const recent = await definition.execute("recent", { sessionId: id, limit: 1 });
+    assert.match(recent.content[0].text, /safe migration plan/);
+    assert.match(recent.content[0].text, /untrusted-context/);
+    assert.doesNotMatch(recent.content[0].text, /private chain|sensitive tool output|secret|-other/);
+    assert.equal(recent.details.totalMessages, 2);
+    assert.equal(recent.details.nextOffset, 1);
+    const older = await definition.execute("older", { sessionId: `pi:${id}`, limit: 1, offset: recent.details.nextOffset });
+    assert.match(older.content[0].text, /Prisma migration gpu issue/);
+    assert.equal(older.details.nextOffset, null);
+    const filtered = await definition.execute("filtered", { sessionId: id, role: "user", project: "alpha", since: "2026-08-20" });
+    assert.equal(filtered.details.totalMessages, 1);
+    const missing = await definition.execute("missing", { sessionId: "missing" });
+    assert.equal(missing.details.count, 0);
+    assert.equal(missing.details.nextOffset, null);
+    await assert.rejects(() => definition.execute("empty", {}), /query or sessionId is required/);
+    await assert.rejects(() => definition.execute("blank", { sessionId: " " }), /sessionId must not be blank/);
+    await assert.rejects(() => definition.execute("variants", { sessionId: id, queryVariants: ["migration"] }), /queryVariants requires query/);
+    await assert.rejects(() => definition.execute("offset", { sessionId: id, query: "migration", offset: 1 }), /offset requires sessionId without query/);
+    assert.equal(fileDigest(transcript), beforeDigest);
+    manager.close();
+  });
+
+  it("searches multiple messages within a session even with query variants", async () => {
+    const root = temporaryDirectory("session-search-scoped");
+    const sessionsDir = path.join(root, "sessions");
+    writeSession(sessionsDir);
+    writeSession(sessionsDir, { id: "session-10" });
+    const manager = new DatabaseManager(path.join(root, "store"));
+    await indexChangedFiles(manager, new PiSource(sessionsDir), 100 * 1024);
+    let definition: any;
+    registerSessionSearchTool({ registerTool(value: unknown) { definition = value; } } as unknown as ExtensionAPI, manager);
+    for (const sessionId of ["session-1", "pi:session-1"]) {
+      for (const queryVariants of [[], ["Prisma", "safe migration"]]) {
+        const result = await definition.execute("scoped", { sessionId, query: "migration", queryVariants });
+        assert.equal(result.details.count, 2);
+        assert.match(result.content[0].text, /Prisma/);
+        assert.match(result.content[0].text, /safe migration plan/);
+        assert.doesNotMatch(result.content[0].text, /session-10/);
+      }
+    }
+    manager.close();
+  });
+
+  it("paginates from emitted context when the global output cap omits messages", async () => {
+    const manager = new DatabaseManager(path.join(temporaryDirectory("session-search-context-cap"), "store"));
+    indexSession(manager, {
+      source: "pi", nativeId: "long-session", project: "alpha", cwd: "/workspace/alpha",
+      startedAt: "2026-08-20T10:00:00.000Z", endedAt: null,
+      messages: Array.from({ length: 20 }, (_, index) => ({
+        nativeId: `message-${index}`, role: "assistant" as const,
+        content: `marker-${index} ${"x".repeat(5_000)}`,
+        timestamp: `2026-08-20T10:00:${String(index).padStart(2, "0")}.000Z`,
+      })),
+    }, 100 * 1024);
+    let definition: any;
+    registerSessionSearchTool({ registerTool(value: unknown) { definition = value; } } as unknown as ExtensionAPI, manager);
+    const first = await definition.execute("first", { sessionId: "long-session", limit: 20 });
+    const text = first.content[0].text as string;
+    const emitted = (text.match(/<retrieved-session /g) ?? []).length;
+    assert.ok(text.length <= 50 * 1024);
+    assert.equal(emitted, (text.match(/<\/retrieved-session>/g) ?? []).length);
+    assert.equal(first.details.outputTruncated, true);
+    assert.equal(first.details.nextOffset, emitted);
+    const next = await definition.execute("next", { sessionId: "long-session", limit: 20, offset: first.details.nextOffset });
+    assert.match(next.content[0].text, new RegExp(`marker-${19 - emitted} `));
+    assert.equal(next.details.nextOffset, null);
+    manager.close();
+  });
+
   it("registers one tool, one command, and exactly three lifecycle hooks", () => {
     const tools: string[] = [];
     const commands: string[] = [];
