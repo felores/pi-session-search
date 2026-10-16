@@ -1,0 +1,49 @@
+name: Release
+
+# Publishes to npm with trusted publishing (OIDC): no token, no secret, no second
+# factor. The npm CLI detects the OIDC environment and authenticates with it before
+# falling back to any token.
+#
+# Triggers: push a version tag (`git tag v0.2.0 && git push origin v0.2.0`), or run
+# it manually from the Actions tab.
+#
+# The `id-token: write` permission is the critical requirement: it is what lets
+# GitHub Actions mint the OIDC token npm trusts. Without it the publish fails with
+# "Unable to authenticate".
+#
+# The trusted publisher configured on npmjs.com must match exactly:
+#   Organization or user: felores
+#   Repository: pi-session-search
+#   Workflow filename: release.yml
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - run: npm ci
+
+      - name: Checks before publishing
+        run: npm run quality
+
+      - run: npm publish
