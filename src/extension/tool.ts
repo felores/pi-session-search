@@ -7,6 +7,20 @@ const DEFAULT_SNIPPET_CHARS = 1_200;
 const MAX_SNIPPET_CHARS = 4_000;
 const MAX_OUTPUT_CHARS = 50 * 1024;
 const MAX_QUERY_CHARS = 500;
+const ISO_TIMESTAMP_WITH_TIMEZONE = /^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+
+function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function validateSince(value: string | undefined): void {
+  if (value === undefined || isValidIsoDate(value)) return;
+  const timestamp = ISO_TIMESTAMP_WITH_TIMEZONE.exec(value);
+  if (timestamp?.[1] && isValidIsoDate(timestamp[1]) && Number.isFinite(Date.parse(value))) return;
+  throw new Error("since must be a valid ISO date or timestamp with an explicit timezone");
+}
 
 function escapeXml(value: string): string {
   return value
@@ -59,6 +73,7 @@ export function registerSessionSearchTool(pi: ExtensionAPI, dbManager: DatabaseM
       if (!query && !sessionId) throw new Error("query or sessionId is required");
       if (!query && args.queryVariants?.length) throw new Error("queryVariants requires query");
       if (args.offset !== undefined && (query || !sessionId)) throw new Error("offset requires sessionId without query");
+      validateSince(args.since);
       const variantsUsed = effectiveVariantCount(query, args.queryVariants ?? []);
       if (indexedMessageCount(dbManager) === 0) {
         return {

@@ -510,6 +510,25 @@ describe("extension contract", () => {
     manager.close();
   });
 
+  it("validates since as an ISO date or timestamp", async () => {
+    const manager = new DatabaseManager(path.join(temporaryDirectory("session-search-since"), "store"));
+    let definition: any;
+    registerSessionSearchTool({ registerTool(value: unknown) { definition = value; } } as unknown as ExtensionAPI, manager);
+
+    await assert.doesNotReject(() => definition.execute("date", { query: "needle", since: "2026-08-20" }));
+    await assert.doesNotReject(() => definition.execute("timestamp", {
+      query: "needle",
+      since: "2026-08-20T10:00:01.000-05:00",
+    }));
+    for (const since of ["yesterday", "2026-02-30", "2026-08-20T10:00:01"]) {
+      await assert.rejects(
+        () => definition.execute("invalid", { query: "needle", since }),
+        /since must be a valid ISO date or timestamp with an explicit timezone/,
+      );
+    }
+    manager.close();
+  });
+
   it("keeps every output fence balanced when the global cap is reached", async () => {
     const root = temporaryDirectory("session-search-cap");
     const sessionsDir = path.join(root, "sessions");
